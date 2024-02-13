@@ -8,6 +8,7 @@ from PIL import Image
 from safetensors import safe_open
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
+import unet2
 from .utils import is_torch2_available
 
 if is_torch2_available():
@@ -92,9 +93,9 @@ class IPAdapter:
         return image_proj_model
 
     def set_ip_adapter(self):
-        unet = self.pipe.unet
+#        unet = self.pipe.unet
         attn_procs = {}
-        for name in unet.attn_processors.keys():
+        for name in unet2.attn_processors.keys():
             cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
             if name.startswith("mid_block"):
                 hidden_size = unet.config.block_out_channels[-1]
