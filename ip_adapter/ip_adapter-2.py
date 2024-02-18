@@ -3,6 +3,12 @@ from diffusers.pipelines.controlnet import MultiControlNetModel
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 from PIL import Image
 
+#import unet2
+from diffusers import UNet2DConditionModel
+unet2 = UNet2DConditionModel.from_pretrained(
+    "stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet"
+)
+
 if hasattr(torch.nn.functional, "scaled_dot_product_attention"):
     from .attention_processor import IPAttnProcessor2_0 as IPAttnProcessor, AttnProcessor2_0 as AttnProcessor, CNAttnProcessor2_0 as CNAttnProcessor
 else:
@@ -49,7 +55,7 @@ class IPAdapter:
         self.set_ip_adapter()
         self.image_proj_model = self.init_proj() if not self.is_plus else self.init_proj_plus()
         self.image_proj_model.load_state_dict(ipadapter_model["image_proj"])
-        ip_layers = torch.nn.ModuleList(self.pipe.unet.attn_processors.values())
+        ip_layers = torch.nn.ModuleList(self.unet2.attn_processors.values())
         ip_layers.load_state_dict(ipadapter_model["ip_adapter"])
         
     def init_proj(self):
@@ -74,7 +80,7 @@ class IPAdapter:
         return image_proj_model
 
     def set_ip_adapter(self):
-        unet = self.pipe.unet
+        unet = unet2
         attn_procs = {}
         for name in unet.attn_processors.keys():
             cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
