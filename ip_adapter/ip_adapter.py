@@ -8,7 +8,12 @@ from PIL import Image
 from safetensors import safe_open
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
-import unet2
+#import unet2
+from diffusers import UNet2DConditionModel
+unet2 = UNet2DConditionModel.from_pretrained(
+    "stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet"
+)
+
 from .utils import is_torch2_available
 
 if is_torch2_available():
