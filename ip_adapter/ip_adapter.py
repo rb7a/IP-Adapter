@@ -1,3 +1,4 @@
+
 import os
 from typing import List
 
@@ -91,25 +92,25 @@ class IPAdapter:
 
     def init_proj(self):
         image_proj_model = ImageProjModel(
-            cross_attention_dim=self.pipe.unet.config.cross_attention_dim,
+            cross_attention_dim=unet2.config.cross_attention_dim,
             clip_embeddings_dim=self.image_encoder.config.projection_dim,
             clip_extra_context_tokens=self.num_tokens,
         ).to(self.device, dtype=torch.float16)
         return image_proj_model
 
     def set_ip_adapter(self):
-#        unet = self.pipe.unet
+#        unet = unet2
         attn_procs = {}
         for name in unet2.attn_processors.keys():
-            cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
+            cross_attention_dim = None if name.endswith("attn1.processor") else unet2.config.cross_attention_dim
             if name.startswith("mid_block"):
-                hidden_size = unet.config.block_out_channels[-1]
+                hidden_size = unet2.config.block_out_channels[-1]
             elif name.startswith("up_blocks"):
                 block_id = int(name[len("up_blocks.")])
-                hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
+                hidden_size = list(reversed(unet2.config.block_out_channels))[block_id]
             elif name.startswith("down_blocks"):
                 block_id = int(name[len("down_blocks.")])
-                hidden_size = unet.config.block_out_channels[block_id]
+                hidden_size = unet2.config.block_out_channels[block_id]
             if cross_attention_dim is None:
                 attn_procs[name] = AttnProcessor()
             else:
@@ -119,7 +120,7 @@ class IPAdapter:
                     scale=1.0,
                     num_tokens=self.num_tokens,
                 ).to(self.device, dtype=torch.float16)
-        unet.set_attn_processor(attn_procs)
+        unet2.set_attn_processor(attn_procs)
         if hasattr(self.pipe, "controlnet"):
             if isinstance(self.pipe.controlnet, MultiControlNetModel):
                 for controlnet in self.pipe.controlnet.nets:
@@ -139,7 +140,7 @@ class IPAdapter:
         else:
             state_dict = torch.load(self.ip_ckpt, map_location="cpu")
         self.image_proj_model.load_state_dict(state_dict["image_proj"])
-        ip_layers = torch.nn.ModuleList(self.pipe.unet.attn_processors.values())
+        ip_layers = torch.nn.ModuleList(unet2.attn_processors.values())
         ip_layers.load_state_dict(state_dict["ip_adapter"])
 
     @torch.inference_mode()
@@ -156,7 +157,7 @@ class IPAdapter:
         return image_prompt_embeds, uncond_image_prompt_embeds
 
     def set_scale(self, scale):
-        for attn_processor in self.pipe.unet.attn_processors.values():
+        for attn_processor in unet2.attn_processors.values():
             if isinstance(attn_processor, IPAttnProcessor):
                 attn_processor.scale = scale
 
@@ -293,13 +294,13 @@ class IPAdapterPlus(IPAdapter):
 
     def init_proj(self):
         image_proj_model = Resampler(
-            dim=self.pipe.unet.config.cross_attention_dim,
+            dim=unet2.config.cross_attention_dim,
             depth=4,
             dim_head=64,
             heads=12,
             num_queries=self.num_tokens,
             embedding_dim=self.image_encoder.config.hidden_size,
-            output_dim=self.pipe.unet.config.cross_attention_dim,
+            output_dim=unet2.config.cross_attention_dim,
             ff_mult=4,
         ).to(self.device, dtype=torch.float16)
         return image_proj_model
@@ -324,7 +325,7 @@ class IPAdapterFull(IPAdapterPlus):
 
     def init_proj(self):
         image_proj_model = MLPProjModel(
-            cross_attention_dim=self.pipe.unet.config.cross_attention_dim,
+            cross_attention_dim=unet2.config.cross_attention_dim,
             clip_embeddings_dim=self.image_encoder.config.hidden_size,
         ).to(self.device, dtype=torch.float16)
         return image_proj_model
@@ -341,7 +342,7 @@ class IPAdapterPlusXL(IPAdapter):
             heads=20,
             num_queries=self.num_tokens,
             embedding_dim=self.image_encoder.config.hidden_size,
-            output_dim=self.pipe.unet.config.cross_attention_dim,
+            output_dim=unet2.config.cross_attention_dim,
             ff_mult=4,
         ).to(self.device, dtype=torch.float16)
         return image_proj_model
