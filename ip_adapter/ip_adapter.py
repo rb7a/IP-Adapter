@@ -1,4 +1,3 @@
-
 import os
 from typing import List
 
@@ -9,13 +8,13 @@ from PIL import Image
 from safetensors import safe_open
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
+from .utils import is_torch2_available, get_generator
+
 #import unet2
 from diffusers import UNet2DConditionModel
 unet2 = UNet2DConditionModel.from_pretrained(
     "stabilityai/stable-diffusion-xl-base-1.0", subfolder="unet"
 )
-
-from .utils import is_torch2_available
 
 if is_torch2_available():
     from .attention_processor import (
@@ -99,18 +98,18 @@ class IPAdapter:
         return image_proj_model
 
     def set_ip_adapter(self):
-#        unet = unet2
+        unet = unet2
         attn_procs = {}
-        for name in unet2.attn_processors.keys():
-            cross_attention_dim = None if name.endswith("attn1.processor") else unet2.config.cross_attention_dim
+        for name in unet.attn_processors.keys():
+            cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
             if name.startswith("mid_block"):
-                hidden_size = unet2.config.block_out_channels[-1]
+                hidden_size = unet.config.block_out_channels[-1]
             elif name.startswith("up_blocks"):
                 block_id = int(name[len("up_blocks.")])
-                hidden_size = list(reversed(unet2.config.block_out_channels))[block_id]
+                hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
             elif name.startswith("down_blocks"):
                 block_id = int(name[len("down_blocks.")])
-                hidden_size = unet2.config.block_out_channels[block_id]
+                hidden_size = unet.config.block_out_channels[block_id]
             if cross_attention_dim is None:
                 attn_procs[name] = AttnProcessor()
             else:
@@ -120,7 +119,7 @@ class IPAdapter:
                     scale=1.0,
                     num_tokens=self.num_tokens,
                 ).to(self.device, dtype=torch.float16)
-        unet2.set_attn_processor(attn_procs)
+        unet.set_attn_processor(attn_procs)
         if hasattr(self.pipe, "controlnet"):
             if isinstance(self.pipe.controlnet, MultiControlNetModel):
                 for controlnet in self.pipe.controlnet.nets:
@@ -211,7 +210,8 @@ class IPAdapter:
             prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1)
             negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1)
 
-        generator = torch.Generator(self.device).manual_seed(seed) if seed is not None else None
+        generator = get_generator(seed, self.device)
+
         images = self.pipe(
             prompt_embeds=prompt_embeds,
             negative_prompt_embeds=negative_prompt_embeds,
@@ -274,7 +274,7 @@ class IPAdapterXL(IPAdapter):
             prompt_embeds = torch.cat([prompt_embeds, image_prompt_embeds], dim=1)
             negative_prompt_embeds = torch.cat([negative_prompt_embeds, uncond_image_prompt_embeds], dim=1)
 
-        self.generator = torch.Generator(self.device).manual_seed(seed) if seed is not None else None
+        self.generator = get_generator(seed, self.device)
         
         images = self.pipe(
             prompt_embeds=prompt_embeds,
@@ -408,7 +408,8 @@ class IPAdapterPlusXL(IPAdapter):
             prompt_embeds = torch.cat([prompt_embeds, image_prompt_embeds], dim=1)
             negative_prompt_embeds = torch.cat([negative_prompt_embeds, uncond_image_prompt_embeds], dim=1)
 
-        generator = torch.Generator(self.device).manual_seed(seed) if seed is not None else None
+        generator = get_generator(seed, self.device)
+
         images = self.pipe(
             prompt_embeds=prompt_embeds,
             negative_prompt_embeds=negative_prompt_embeds,
